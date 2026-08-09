@@ -1,0 +1,17 @@
+build/
+*.o
+*.exe
+*.dll
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bat
+docs/
+engine/
+src/.cache
+src/.vscode
+AGENTS - 副本.md
+AGENTS.md
+steps.md

@@ -1,0 +1,22 @@
+[
+  {
+    "directory": "c:/Users/imjiong/Desktop/chinesechess",
+    "command": "g++ -std=c++17 -Wall -O2 -I\"C:\\wxWidgets-3.2.11\\include\" -I\"C:\\wxWidgets-3.2.11\\lib\\gcc_dll\\mswu\" -Isrc -c src/main.cpp -o build/main.o",
+    "file": "src/main.cpp"
+  },
+  {
+    "directory": "c:/Users/imjiong/Desktop/chinesechess",
+    "command": "g++ -std=c++17 -Wall -O2 -I\"C:\\wxWidgets-3.2.11\\include\" -I\"C:\\wxWidgets-3.2.11\\lib\\gcc_dll\\mswu\" -Isrc -c src/core/Board.cpp -o build/core/Board.o",
+    "file": "src/core/Board.cpp"
+  },
+  {
+    "directory": "c:/Users/imjiong/Desktop/chinesechess",
+    "command": "g++ -std=c++17 -Wall -O2 -I\"C:\\wxWidgets-3.2.11\\include\" -I\"C:\\wxWidgets-3.2.11\\lib\\gcc_dll\\mswu\" -Isrc -c src/gui/BoardPanel.cpp -o build/gui/BoardPanel.o",
+    "file": "src/gui/BoardPanel.cpp"
+  },
+  {
+    "directory": "c:/Users/imjiong/Desktop/chinesechess",
+    "command": "g++ -std=c++17 -Wall -O2 -I\"C:\\wxWidgets-3.2.11\\include\" -I\"C:\\wxWidgets-3.2.11\\lib\\gcc_dll\\mswu\" -Isrc -c src/gui/MainFrame.cpp -o build/gui/MainFrame.o",
+    "file": "src/gui/MainFrame.cpp"
+  }
+]
