@@ -14,6 +14,7 @@ wxEND_EVENT_TABLE()
 BoardPanel::BoardPanel(wxWindow* parent)
     : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
               wxFULL_REPAINT_ON_RESIZE | wxCLIP_CHILDREN),
+      m_game(nullptr),
       m_flipped(false),
       m_selectedRow(-1), m_selectedCol(-1),
       m_showIllegal(false),
@@ -22,6 +23,24 @@ BoardPanel::BoardPanel(wxWindow* parent)
     SetBackgroundStyle(wxBG_STYLE_PAINT);
 
     m_illegalTimer = new wxTimer(this, wxID_ANY);
+}
+
+void BoardPanel::SetGame(Game* game)
+{
+    m_game = game;
+    if (m_game)
+        m_board = m_game->GetBoard();
+    Refresh();
+}
+
+void BoardPanel::SyncWithGame()
+{
+    if (m_game)
+        m_board = m_game->GetBoard();
+    m_selectedRow = -1;
+    m_selectedCol = -1;
+    m_legalMoves.clear();
+    Refresh();
 }
 
 BoardPanel::~BoardPanel()
@@ -346,6 +365,8 @@ void BoardPanel::OnLeftDown(wxMouseEvent& event)
         if (isLegal)
         {
             m_board.MakeMove(move);
+            if (m_game)
+                m_game->AddMove(move);
             m_selectedRow = -1;
             m_selectedCol = -1;
             m_legalMoves.clear();

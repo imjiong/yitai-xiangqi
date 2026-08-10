@@ -3,6 +3,7 @@
 
 #include <wx/wx.h>
 #include "../core/Board.h"
+#include "../core/Game.h"
 
 class BoardPanel : public wxPanel
 {
@@ -13,6 +14,11 @@ public:
     void ResetBoard();
     void FlipView();
     bool IsFlipped() const { return m_flipped; }
+
+    void SetGame(Game* game);
+    Game* GetGame() { return m_game; }
+
+    void SyncWithGame();
 
 private:
     void OnPaint(wxPaintEvent& event);
@@ -32,6 +38,7 @@ private:
     bool ScreenToBoard(int x, int y, int& row, int& col) const;
 
     Board m_board;
+    Game* m_game;
     bool m_flipped;
 
     int m_selectedRow;
