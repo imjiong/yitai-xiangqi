@@ -18,7 +18,8 @@ BoardPanel::BoardPanel(wxWindow* parent)
       m_flipped(false),
       m_selectedRow(-1), m_selectedCol(-1),
       m_showIllegal(false),
-      m_cellSize(56), m_marginX(20), m_marginY(20), m_pieceRadius(24)
+      m_cellSize(56), m_marginX(20), m_marginY(20), m_pieceRadius(24),
+      m_moveCallback(nullptr), m_moveCallbackData(nullptr)
 {
     SetBackgroundStyle(wxBG_STYLE_PAINT);
 
@@ -41,6 +42,12 @@ void BoardPanel::SyncWithGame()
     m_selectedCol = -1;
     m_legalMoves.clear();
     Refresh();
+}
+
+void BoardPanel::SetMoveCallback(MoveCallback cb, void* userData)
+{
+    m_moveCallback = cb;
+    m_moveCallbackData = userData;
 }
 
 BoardPanel::~BoardPanel()
@@ -372,6 +379,8 @@ void BoardPanel::OnLeftDown(wxMouseEvent& event)
             m_legalMoves.clear();
             m_showIllegal = false;
             Refresh();
+            if (m_moveCallback)
+                m_moveCallback(m_moveCallbackData);
             return;
         }
 

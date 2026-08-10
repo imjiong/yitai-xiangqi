@@ -90,6 +90,7 @@ MainFrame::MainFrame()
         .Floatable(true));
 
     m_boardPanel->SetGame(&m_game);
+    m_boardPanel->SetMoveCallback(&MainFrame::OnBoardMoveMade, this);
 
     m_auiManager.Update();
 
@@ -374,4 +375,11 @@ void MainFrame::OnNew(wxCommandEvent& event)
     if (m_movePanel)
         m_movePanel->RefreshList();
     SetStatusText(wxT("新建棋谱"), 0);
+}
+
+void MainFrame::OnBoardMoveMade(void* userData)
+{
+    MainFrame* frame = static_cast<MainFrame*>(userData);
+    if (frame && frame->m_movePanel)
+        frame->m_movePanel->RefreshList();
 }

@@ -3,6 +3,14 @@
 #include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <wx/string.h>
+
+static std::string WStringToUTF8(const std::wstring& ws)
+{
+    wxString wx(ws);
+    std::string s = std::string(wx.utf8_str().data());
+    return s;
+}
 
 Game::Game()
 {
@@ -142,6 +150,58 @@ void Game::RebuildBoardToIndex(int index)
         m_board.MakeMove(m_moves[i].move);
 }
 
+static int CountSameTypeOnFile(const Board& board, PieceType type, PieceColor color, int col, int excludeRow)
+{
+    int count = 0;
+    for (int r = 0; r < Board::ROWS; r++)
+    {
+        if (r == excludeRow) continue;
+        Piece p = board.GetPiece(r, col);
+        if (!p.IsEmpty() && p.type == type && p.color == color)
+            count++;
+    }
+    return count;
+}
+
+static std::wstring GetDisambigPrefix(const Board& board, const ChessMove& move, PieceType type, PieceColor color)
+{
+    int sameOnFile = CountSameTypeOnFile(board, type, color, move.fromCol, move.fromRow);
+    if (sameOnFile == 0)
+        return L"";
+
+    struct SamePiece { int row; int col; };
+    std::vector<SamePiece> samePieces;
+    samePieces.push_back({move.fromRow, move.fromCol});
+    for (int r = 0; r < Board::ROWS; r++)
+    {
+        if (r == move.fromRow) continue;
+        Piece p = board.GetPiece(r, move.fromCol);
+        if (!p.IsEmpty() && p.type == type && p.color == color)
+            samePieces.push_back({r, move.fromCol});
+    }
+
+    if (samePieces.size() == 2)
+    {
+        bool isFirst = (color == RED) ? (samePieces[0].row < samePieces[1].row)
+                                      : (samePieces[0].row > samePieces[1].row);
+        return isFirst ? L"前" : L"后";
+    }
+
+    std::sort(samePieces.begin(), samePieces.end(),
+        [color](const SamePiece& a, const SamePiece& b)
+        {
+            return (color == RED) ? (a.row < b.row) : (a.row > b.row);
+        });
+
+    static const wchar_t* threePrefixes[] = { L"前", L"中", L"后" };
+    for (size_t i = 0; i < samePieces.size(); i++)
+    {
+        if (samePieces[i].row == move.fromRow)
+            return threePrefixes[i];
+    }
+    return L"";
+}
+
 std::string Game::MoveToChinese(const ChessMove& move, PieceType type, PieceColor color, const Board& board)
 {
     static const wchar_t* redNums[] = { L"一", L"二", L"三", L"四", L"五", L"六", L"七", L"八", L"九" };
@@ -204,13 +264,23 @@ std::string Game::MoveToChinese(const ChessMove& move, PieceType type, PieceColo
         }
     }
 
+    std::wstring disambig = GetDisambigPrefix(board, move, type, color);
+
     std::wstring result;
-    result += pieces[type];
-    result += nums[fromFile];
+    if (!disambig.empty())
+    {
+        result += disambig;
+        result += pieces[type];
+    }
+    else
+    {
+        result += pieces[type];
+        result += nums[fromFile];
+    }
     result += dirChar;
     result += targetStr;
 
-    return std::string(result.begin(), result.end());
+    return WStringToUTF8(result);
 }
 
 std::string Game::MoveToICCS(const ChessMove& move)
@@ -239,6 +309,11 @@ ChessMove Game::ICCSToMove(const std::string& iccs)
     int toCol = iccs[3] - 'a';
     int toRow = 9 - (iccs[4] - '0');
 
+    if (fromCol < 0 || fromCol >= Board::COLS || toCol < 0 || toCol >= Board::COLS)
+        return ChessMove();
+    if (fromRow < 0 || fromRow >= Board::ROWS || toRow < 0 || toRow >= Board::ROWS)
+        return ChessMove();
+
     return ChessMove(fromRow, fromCol, toRow, toCol);
 }
 
@@ -262,8 +337,15 @@ ChessMove Game::CoordinateToMove(const std::string& coord)
     int toCol = coord[2] - 'a';
     int toRow = 9 - (coord[3] - '0');
 
+    if (fromCol < 0 || fromCol >= Board::COLS || toCol < 0 || toCol >= Board::COLS)
+        return ChessMove();
+    if (fromRow < 0 || fromRow >= Board::ROWS || toRow < 0 || toRow >= Board::ROWS)
+        return ChessMove();
+
     return ChessMove(fromRow, fromCol, toRow, toCol);
 }
+
+
 
 bool Game::LoadFromPGN(const std::string& filename)
 {
@@ -373,7 +455,20 @@ bool Game::LoadFromBuffer(const std::string& content)
         if (token == "1-0" || token == "0-1" || token == "1/2-1/2" || token == "*")
             continue;
 
+        if (token.length() < 4)
+            continue;
+
         ChessMove move = CoordinateToMove(token);
+        if (move.fromRow < 0 || move.fromRow >= Board::ROWS || move.fromCol < 0 || move.fromCol >= Board::COLS)
+        {
+            move = ICCSToMove(token);
+        }
+        if (move.fromRow < 0 || move.fromRow >= Board::ROWS || move.fromCol < 0 || move.fromCol >= Board::COLS)
+            continue;
+
+        if (!m_board.IsLegalMove(move))
+            continue;
+
         AddMove(move);
     }
 
