@@ -428,6 +428,24 @@ std::vector<ChessMove> Board::GenerateLegalMoves(PieceColor color)
     return legalMoves;
 }
 
+std::vector<ChessMove> Board::GenerateLegalMoves(PieceColor color) const
+{
+    std::vector<ChessMove> pseudoMoves = GenerateMoves(color);
+    std::vector<ChessMove> legalMoves;
+
+    for (const auto& move : pseudoMoves)
+    {
+        Board temp = *this;
+        temp.m_board[move.toRow][move.toCol] = temp.m_board[move.fromRow][move.fromCol];
+        temp.m_board[move.fromRow][move.fromCol] = Piece();
+
+        if (!temp.IsInCheck(color) && !temp.KingsFaceEachOther())
+            legalMoves.push_back(move);
+    }
+
+    return legalMoves;
+}
+
 std::vector<ChessMove> Board::GenerateLegalMoves()
 {
     return GenerateLegalMoves(m_currentPlayer);

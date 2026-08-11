@@ -55,7 +55,8 @@ MainFrame::MainFrame()
               wxDEFAULT_FRAME_STYLE | wxCLIP_CHILDREN),
       m_boardPanel(nullptr),
       m_movePanel(nullptr),
-      m_isPlaying(false)
+      m_isPlaying(false),
+      m_currentFile()
 {
     SetMinSize(wxSize(800, 600));
 
@@ -324,8 +325,14 @@ void MainFrame::OnOpen(wxCommandEvent& event)
     if (dlg.ShowModal() == wxID_OK)
     {
         wxString path = dlg.GetPath();
-        if (m_game.LoadFromPGN(std::string(path.mb_str())))
+        std::string utf8Path;
         {
+            wxCharBuffer buf = path.ToUTF8();
+            utf8Path = std::string(buf.data());
+        }
+        if (m_game.LoadFromPGN(utf8Path))
+        {
+            m_currentFile = path;
             if (m_boardPanel)
                 m_boardPanel->SyncWithGame();
             if (m_movePanel)
@@ -341,7 +348,34 @@ void MainFrame::OnOpen(wxCommandEvent& event)
 
 void MainFrame::OnSave(wxCommandEvent& event)
 {
-    wxFileDialog dlg(this, wxT("保存棋谱"), "", "",
+    if (m_currentFile.IsEmpty())
+    {
+        OnSaveAs(event);
+        return;
+    }
+
+    wxString path = m_currentFile;
+    if (path.Right(4).Lower() != wxT(".pgn"))
+        path += wxT(".pgn");
+
+    std::string utf8Path;
+    {
+        wxCharBuffer buf = path.ToUTF8();
+        utf8Path = std::string(buf.data());
+    }
+    if (m_game.SaveToPGN(utf8Path))
+    {
+        SetStatusText(wxT("已保存: ") + path, 0);
+    }
+    else
+    {
+        wxMessageBox(wxT("无法保存文件: ") + path, wxT("错误"), wxOK | wxICON_ERROR);
+    }
+}
+
+void MainFrame::OnSaveAs(wxCommandEvent& event)
+{
+    wxFileDialog dlg(this, wxT("另存为"), "", "",
                      wxT("PGN 文件 (*.pgn)|*.pgn"),
                      wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
 
@@ -351,8 +385,14 @@ void MainFrame::OnSave(wxCommandEvent& event)
         if (path.Right(4).Lower() != wxT(".pgn"))
             path += wxT(".pgn");
 
-        if (m_game.SaveToPGN(std::string(path.mb_str())))
+        std::string utf8Path;
         {
+            wxCharBuffer buf = path.ToUTF8();
+            utf8Path = std::string(buf.data());
+        }
+        if (m_game.SaveToPGN(utf8Path))
+        {
+            m_currentFile = path;
             SetStatusText(wxT("已保存: ") + path, 0);
         }
         else
@@ -360,11 +400,6 @@ void MainFrame::OnSave(wxCommandEvent& event)
             wxMessageBox(wxT("无法保存文件: ") + path, wxT("错误"), wxOK | wxICON_ERROR);
         }
     }
-}
-
-void MainFrame::OnSaveAs(wxCommandEvent& event)
-{
-    OnSave(event);
 }
 
 void MainFrame::OnNew(wxCommandEvent& event)

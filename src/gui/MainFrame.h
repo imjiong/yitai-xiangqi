@@ -136,6 +136,7 @@ private:
     wxToolBarToolBase* m_playTool;   // 播放工具栏按钮
     wxTimer* m_playTimer;            // 播放计时器
     bool m_isPlaying;                 // 是否正在播放
+    wxString m_currentFile;          // 当前文件路径（用于保存）
 
     wxDECLARE_EVENT_TABLE();         // 声明事件表
 };

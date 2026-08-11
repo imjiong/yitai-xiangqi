@@ -4,12 +4,265 @@
 #include <algorithm>
 #include <cctype>
 #include <wx/string.h>
+#include <wx/encconv.h>
 
 static std::string WStringToUTF8(const std::wstring& ws)
 {
     wxString wx(ws);
-    std::string s = std::string(wx.utf8_str().data());
-    return s;
+    return std::string(wx.utf8_str().data());
+}
+
+static std::string UTF8ToGBK(const std::string& utf8)
+{
+    if (utf8.empty())
+        return "";
+    wxString wx(wxString::FromUTF8(utf8.c_str()));
+    if (wx.IsEmpty())
+        return utf8;
+    wxCharBuffer buf = wxCSConv(wxFONTENCODING_CP936).cWX2MB(wx.wc_str());
+    if (!buf)
+        return utf8;
+    return std::string(buf.data(), buf.length());
+}
+
+static std::string GBKToUTF8(const std::string& gbk)
+{
+    if (gbk.empty())
+        return "";
+    wxWCharBuffer wbuf = wxCSConv(wxFONTENCODING_CP936).cMB2WC(
+        gbk.c_str(), gbk.size(), nullptr);
+    if (!wbuf)
+        return gbk;
+    wxString wx(wbuf);
+    if (wx.IsEmpty())
+        return gbk;
+    return std::string(wx.utf8_str().data());
+}
+
+static std::vector<std::string> UTF8Chars(const std::string& s)
+{
+    std::vector<std::string> chars;
+    for (size_t i = 0; i < s.size();)
+    {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        size_t len = 1;
+        if (c >= 0xF0) len = 4;
+        else if (c >= 0xE0) len = 3;
+        else if (c >= 0xC0) len = 2;
+        chars.push_back(s.substr(i, len));
+        i += len;
+    }
+    return chars;
+}
+
+static int ChineseNumToIndex(const std::string& ch)
+{
+    static const struct { const char* s; int v; } map[] = {
+        {"一", 0}, {"二", 1}, {"三", 2}, {"四", 3}, {"五", 4},
+        {"六", 5}, {"七", 6}, {"八", 7}, {"九", 8},
+        {"１", 0}, {"２", 1}, {"３", 2}, {"４", 3}, {"５", 4},
+        {"６", 5}, {"７", 6}, {"８", 7}, {"９", 8},
+    };
+    for (auto& m : map)
+        if (ch == m.s) return m.v;
+    if (ch.size() == 1 && ch[0] >= '1' && ch[0] <= '9')
+        return ch[0] - '1';
+    return -1;
+}
+
+static std::pair<PieceType, PieceColor> CharToPiece(const std::string& ch)
+{
+    if (ch == "帅" || ch == "帥") return {KING, RED};
+    if (ch == "仕") return {ADVISOR, RED};
+    if (ch == "相") return {ELEPHANT, RED};
+    if (ch == "马" || ch == "馬" || ch == "傌") return {HORSE, RED};
+    if (ch == "车" || ch == "車" || ch == "俥") return {CHARIOT, RED};
+    if (ch == "炮" || ch == "砲" || ch == "包") return {CANNON, RED};
+    if (ch == "兵") return {PAWN, RED};
+    if (ch == "将" || ch == "將") return {KING, BLACK};
+    if (ch == "士") return {ADVISOR, BLACK};
+    if (ch == "象") return {ELEPHANT, BLACK};
+    if (ch == "马" || ch == "馬") return {HORSE, BLACK};
+    if (ch == "车" || ch == "車") return {CHARIOT, BLACK};
+    if (ch == "炮" || ch == "砲" || ch == "包") return {CANNON, BLACK};
+    if (ch == "卒") return {PAWN, BLACK};
+    return {NONE, RED};
+}
+
+static bool IsDiagonalPiece(PieceType t)
+{
+    return t == HORSE || t == ADVISOR || t == ELEPHANT;
+}
+
+static ChessMove ParseChineseNotation(const Board& board, PieceColor side, const std::string& notation)
+{
+    std::vector<std::string> chs = UTF8Chars(notation);
+    if (chs.size() < 4)
+        return ChessMove();
+
+    size_t idx = 0;
+    std::string prefix;
+    if (chs[0] == "前" || chs[0] == "后" || chs[0] == "中")
+    {
+        prefix = chs[0];
+        idx = 1;
+    }
+    if (chs.size() - idx < 4)
+        return ChessMove();
+
+    auto [type, color] = CharToPiece(chs[idx]);
+    if (type == NONE || color != side)
+        return ChessMove();
+    idx++;
+
+    std::string fileChar = chs[idx];
+    std::string dirChar = chs[idx + 1];
+    std::string targetChar = chs[idx + 2];
+
+    bool isHorizontal = false;
+    bool isAdvance = false;
+    if (dirChar == "进")
+        isAdvance = true;
+    else if (dirChar == "退")
+        isAdvance = false;
+    else if (dirChar == "平")
+        isHorizontal = true;
+    else
+        return ChessMove();
+
+    int fromFile = ChineseNumToIndex(fileChar);
+    if (fromFile < 0)
+        return ChessMove();
+
+    int targetNum = ChineseNumToIndex(targetChar);
+    if (targetNum < 0)
+        return ChessMove();
+
+    std::vector<ChessMove> legal = board.GenerateLegalMoves(side);
+    ChessMove bestMatch;
+    int found = 0;
+
+    for (const auto& mv : legal)
+    {
+        Piece piece = board.GetPiece(mv.fromRow, mv.fromCol);
+        if (piece.type != type || piece.color != side)
+            continue;
+
+        int mvFromFile = (side == RED) ? (Board::COLS - 1 - mv.fromCol) : mv.fromCol;
+        if (prefix.empty() && mvFromFile != fromFile)
+            continue;
+
+        int dRow = mv.toRow - mv.fromRow;
+        int dCol = mv.toCol - mv.fromCol;
+
+        bool mvIsAdvance, mvIsHorizontal;
+        if (side == RED)
+            mvIsAdvance = (dRow < 0);
+        else
+            mvIsAdvance = (dRow > 0);
+        mvIsHorizontal = (dRow == 0 && dCol != 0);
+
+        if (isHorizontal && !mvIsHorizontal)
+            continue;
+        if (!isHorizontal && mvIsHorizontal)
+            continue;
+        if (!isHorizontal && mvIsAdvance != isAdvance)
+            continue;
+
+        bool targetMatch = false;
+        if (IsDiagonalPiece(type))
+        {
+            int mvToFile = (side == RED) ? (Board::COLS - 1 - mv.toCol) : mv.toCol;
+            targetMatch = (mvToFile == targetNum);
+        }
+        else if (isHorizontal)
+        {
+            int mvToFile = (side == RED) ? (Board::COLS - 1 - mv.toCol) : mv.toCol;
+            targetMatch = (mvToFile == targetNum);
+        }
+        else
+        {
+            int steps = (side == RED) ? -dRow : dRow;
+            targetMatch = (steps == targetNum + 1);
+        }
+
+        if (!targetMatch)
+            continue;
+
+        bestMatch = mv;
+        found++;
+    }
+
+    if (found == 1)
+        return bestMatch;
+
+    if (found > 1 && !prefix.empty())
+    {
+        std::vector<ChessMove> filtered;
+        for (const auto& mv : legal)
+        {
+            Piece piece = board.GetPiece(mv.fromRow, mv.fromCol);
+            if (piece.type != type || piece.color != side)
+                continue;
+
+            int mvFromFile = (side == RED) ? (Board::COLS - 1 - mv.fromCol) : mv.fromCol;
+            if (mvFromFile != fromFile)
+                continue;
+
+            int dRow = mv.toRow - mv.fromRow;
+            int dCol = mv.toCol - mv.fromCol;
+
+            bool mvIsAdvance, mvIsHorizontal;
+            if (side == RED)
+                mvIsAdvance = (dRow < 0);
+            else
+                mvIsAdvance = (dRow > 0);
+            mvIsHorizontal = (dRow == 0 && dCol != 0);
+
+            if (isHorizontal && !mvIsHorizontal) continue;
+            if (!isHorizontal && mvIsHorizontal) continue;
+            if (!isHorizontal && mvIsAdvance != isAdvance) continue;
+
+            bool targetMatch = false;
+            if (IsDiagonalPiece(type))
+            {
+                int mvToFile = (side == RED) ? (Board::COLS - 1 - mv.toCol) : mv.toCol;
+                targetMatch = (mvToFile == targetNum);
+            }
+            else if (isHorizontal)
+            {
+                int mvToFile = (side == RED) ? (Board::COLS - 1 - mv.toCol) : mv.toCol;
+                targetMatch = (mvToFile == targetNum);
+            }
+            else
+            {
+                int steps = (side == RED) ? -dRow : dRow;
+                targetMatch = (steps == targetNum + 1);
+            }
+            if (!targetMatch) continue;
+
+            filtered.push_back(mv);
+        }
+
+        if (filtered.size() >= 2)
+        {
+            auto sorted = filtered;
+            std::sort(sorted.begin(), sorted.end(),
+                [side](const ChessMove& a, const ChessMove& b)
+                {
+                    return (side == RED) ? (a.fromRow > b.fromRow) : (a.fromRow < b.fromRow);
+                });
+
+            if (prefix == "前")
+                return sorted[0];
+            else if (prefix == "中")
+                return sorted.size() >= 3 ? sorted[1] : sorted[0];
+            else if (prefix == "后")
+                return sorted.back();
+        }
+    }
+
+    return ChessMove();
 }
 
 Game::Game()
@@ -205,9 +458,9 @@ static std::wstring GetDisambigPrefix(const Board& board, const ChessMove& move,
 std::string Game::MoveToChinese(const ChessMove& move, PieceType type, PieceColor color, const Board& board)
 {
     static const wchar_t* redNums[] = { L"一", L"二", L"三", L"四", L"五", L"六", L"七", L"八", L"九" };
-    static const wchar_t* blackNums[] = { L"1", L"2", L"3", L"4", L"5", L"6", L"7", L"8", L"9" };
-    static const wchar_t* pieceChars[] = { L"帥", L"仕", L"相", L"馬", L"車", L"炮", L"兵" };
-    static const wchar_t* pieceCharsB[] = { L"將", L"士", L"象", L"馬", L"車", L"砲", L"卒" };
+    static const wchar_t* blackNums[] = { L"１", L"２", L"３", L"４", L"５", L"６", L"７", L"８", L"９" };
+    static const wchar_t* pieceChars[] = { L"帅", L"仕", L"相", L"马", L"车", L"炮", L"兵" };
+    static const wchar_t* pieceCharsB[] = { L"将", L"士", L"象", L"马", L"车", L"炮", L"卒" };
 
     const wchar_t** nums = (color == RED) ? redNums : blackNums;
     const wchar_t** pieces = (color == RED) ? pieceChars : pieceCharsB;
@@ -349,7 +602,7 @@ ChessMove Game::CoordinateToMove(const std::string& coord)
 
 bool Game::LoadFromPGN(const std::string& filename)
 {
-    std::ifstream file(filename);
+    std::ifstream file(filename, std::ios::binary);
     if (!file.is_open())
         return false;
 
@@ -357,18 +610,34 @@ bool Game::LoadFromPGN(const std::string& filename)
     buffer << file.rdbuf();
     file.close();
 
-    return LoadFromBuffer(buffer.str());
+    std::string raw = buffer.str();
+
+    if (!raw.empty() && (static_cast<unsigned char>(raw[0]) == 0xFF ||
+                         (raw.size() > 1 && static_cast<unsigned char>(raw[0]) == 0xEF &&
+                          static_cast<unsigned char>(raw[1]) == 0xBB)))
+    {
+        return LoadFromBuffer(raw);
+    }
+
+    std::string utf8 = GBKToUTF8(raw);
+    if (utf8.empty() && !raw.empty())
+        utf8 = raw;
+
+    return LoadFromBuffer(utf8);
 }
 
 bool Game::SaveToPGN(const std::string& filename) const
 {
-    std::ofstream file(filename);
+    std::string content;
+    SaveToBuffer(content);
+
+    std::string gbk = UTF8ToGBK(content);
+
+    std::ofstream file(filename, std::ios::binary);
     if (!file.is_open())
         return false;
 
-    std::string content;
-    SaveToBuffer(content);
-    file << content;
+    file << gbk;
     file.close();
 
     return true;
@@ -385,6 +654,8 @@ bool Game::LoadFromBuffer(const std::string& content)
 
     while (std::getline(stream, line))
     {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
         if (line.empty())
             continue;
 
@@ -442,8 +713,19 @@ bool Game::LoadFromBuffer(const std::string& content)
             cleaned += ch;
     }
 
+    std::string format = GetTagValue("Format");
+    bool useChinese = (format.empty() || format == "Chinese");
+
     std::istringstream moveStream(cleaned);
     std::string token;
+    PieceColor currentSide = RED;
+    if (!m_info.fen.empty())
+    {
+        size_t sp = m_info.fen.find(' ');
+        if (sp != std::string::npos && m_info.fen[sp + 1] == 'b')
+            currentSide = BLACK;
+    }
+
     while (moveStream >> token)
     {
         if (token.empty())
@@ -455,14 +737,20 @@ bool Game::LoadFromBuffer(const std::string& content)
         if (token == "1-0" || token == "0-1" || token == "1/2-1/2" || token == "*")
             continue;
 
-        if (token.length() < 4)
-            continue;
+        ChessMove move;
 
-        ChessMove move = CoordinateToMove(token);
-        if (move.fromRow < 0 || move.fromRow >= Board::ROWS || move.fromCol < 0 || move.fromCol >= Board::COLS)
+        if (useChinese)
         {
-            move = ICCSToMove(token);
+            move = ParseChineseNotation(m_board, currentSide, token);
         }
+        else
+        {
+            if (token.length() >= 4 && token[2] == '-')
+                move = ICCSToMove(token);
+            else if (token.length() >= 4)
+                move = CoordinateToMove(token);
+        }
+
         if (move.fromRow < 0 || move.fromRow >= Board::ROWS || move.fromCol < 0 || move.fromCol >= Board::COLS)
             continue;
 
@@ -470,6 +758,7 @@ bool Game::LoadFromBuffer(const std::string& content)
             continue;
 
         AddMove(move);
+        currentSide = (currentSide == RED) ? BLACK : RED;
     }
 
     m_currentIndex = -1;
@@ -491,19 +780,32 @@ bool Game::SaveToBuffer(std::string& content) const
     };
 
     addTag("Game", "Chinese Chess");
+    addTag("Format", "Chinese");
     addTag("Event", m_info.eventName);
     addTag("Site", m_info.site);
     addTag("Date", m_info.date);
     addTag("Round", m_info.round);
+    addTag("RedTeam", GetTagValue("RedTeam"));
     addTag("Red", m_info.redPlayer);
+    addTag("BlackTeam", GetTagValue("BlackTeam"));
     addTag("Black", m_info.blackPlayer);
     addTag("Result", m_info.result);
     addTag("RedElo", m_info.redElo);
     addTag("BlackElo", m_info.blackElo);
-    addTag("Ecco", m_info.ecco);
+    addTag("ECCO", m_info.ecco);
+    addTag("Opening", GetTagValue("Opening"));
+    addTag("Variation", GetTagValue("Variation"));
 
-    if (!m_info.fen.empty())
-        addTag("FEN", m_info.fen);
+    {
+        Board fenBoard;
+        std::string fen = m_info.fen;
+        if (fen.empty())
+        {
+            fenBoard.Reset();
+            fen = fenBoard.ToFEN();
+        }
+        addTag("FEN", fen);
+    }
 
     content += "\n";
 

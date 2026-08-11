@@ -195,7 +195,14 @@ public:
      * @return 所有合法走法的列表
      */
     std::vector<ChessMove> GenerateLegalMoves(PieceColor color);
-    
+
+    /**
+     * @brief 生成指定颜色的所有合法走法（常量版本）
+     * @param color 要生成走法的颜色
+     * @return 所有合法走法的列表
+     */
+    std::vector<ChessMove> GenerateLegalMoves(PieceColor color) const;
+
     /**
      * @brief 生成当前玩家的所有合法走法
      * @return 所有合法走法的列表
