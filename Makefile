@@ -20,7 +20,7 @@ LIBS := -lwxmsw32u_aui -lwxmsw32u_core -lwxbase32u \
 
 SRC_DIR := src
 BUILD_DIR := build
-TARGET := $(BUILD_DIR)/chinesechess.exe
+TARGET := $(BUILD_DIR)/yitai-xiangyi.exe
 
 SOURCES := $(wildcard $(SRC_DIR)/*.cpp) \
            $(wildcard $(SRC_DIR)/core/*.cpp) \

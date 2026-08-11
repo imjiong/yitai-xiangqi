@@ -3,7 +3,7 @@
 #include <wx/gdicmn.h>
 #include <wx/filedlg.h>
 
-static const wxString APP_TITLE = wxT("中国象棋 UCI 客户端");
+static const wxString APP_TITLE = wxT("弈台象棋 - 中国象棋 UCI 客户端");
 static const int STATUSBAR_PANES = 5;
 
 enum
